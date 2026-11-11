@@ -1,0 +1,148 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model dokumen_permintaan {
+  id                   BigInt               @id @default(autoincrement())
+  permintaan_id        BigInt               @unique
+  nama_file            String               @db.VarChar(255)
+  nama_file_simpan     String               @unique @db.VarChar(255)
+  path_file            String
+  mime_type            String               @default("application/pdf") @db.VarChar(100)
+  ukuran_file          BigInt
+  created_at           DateTime             @default(now()) @db.Timestamp(6)
+  updated_at           DateTime             @default(now()) @db.Timestamp(6)
+
+  permintaan_pengadaan permintaan_pengadaan @relation(fields: [permintaan_id], references: [id], onDelete: Cascade, map: "fk_dokumen_permintaan")
+}
+
+model permintaan_pengadaan {
+  id                        BigInt                      @id @default(autoincrement())
+  nomor_surat               String                      @db.VarChar(100)
+  tanggal_surat             DateTime                    @db.Date
+  tanggal_diterima          DateTime                    @default(now()) @db.Timestamp(6)
+  unit_pln_id               BigInt
+  nama_pic                  String                      @db.VarChar(150)
+  kontak_pic                String                      @db.VarChar(30)
+  jenis_pengadaan           String                      @db.VarChar(20)
+  nama_pengadaan            String                      @db.VarChar(255)
+  deskripsi_kebutuhan       String
+  lokasi_pengiriman         String                      @db.VarChar(255)
+  tanggal_kebutuhan         DateTime                    @db.Date
+  status                    String                      @default("Permintaan Diterima") @db.VarChar(50)
+  created_at                DateTime                    @default(now()) @db.Timestamp(6)
+  updated_at                DateTime                    @default(now()) @db.Timestamp(6)
+
+  dokumen_permintaan        dokumen_permintaan?
+  unit_pln                  unit_pln                    @relation(fields: [unit_pln_id], references: [id], map: "fk_permintaan_unit")
+  procurement_request_items procurement_request_items[]
+  status_history            ProcurementStatusHistory[]
+  surat_penawaran           surat_penawaran?
+   tanggal_pengiriman       DateTime?
+}
+
+model unit_pln {
+  id                   BigInt                 @id @default(autoincrement())
+  nama_unit            String                 @unique @db.VarChar(150)
+  created_at           DateTime?              @default(now()) @db.Timestamp(6)
+
+  permintaan_pengadaan permintaan_pengadaan[]
+}
+
+model procurement_request_items {
+  id                   BigInt   @id @default(autoincrement())
+  requestId            BigInt
+  nama_item            String   @db.VarChar(255)
+  spesifikasi_item     String
+  jumlah_permintaan    Int
+  jenis_item           String   @db.VarChar(20)
+  referencePrice       Decimal? @db.Decimal(18, 2)
+
+  // Checklist pembelian / pelaksanaan
+  sudah_dibeli         Boolean  @default(false)
+  tanggal_pembelian    DateTime? @db.Date
+
+  created_at           DateTime @default(now()) @db.Timestamp(6)
+  updated_at           DateTime @updatedAt
+
+  permintaan_pengadaan permintaan_pengadaan @relation(fields: [requestId], references: [id], onDelete: Cascade, map: "fk_procurement_request_items_request")
+
+  @@index([requestId])
+}
+
+
+model ProcurementStatusHistory {
+  id                   BigInt   @id @default(autoincrement())
+  requestId            BigInt
+  status               String   @db.VarChar(50)
+  changedAt            DateTime @default(now()) @db.Timestamp(6)
+
+  permintaan_pengadaan permintaan_pengadaan @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+}
+
+model surat_penawaran {
+  id                         BigInt   @id @default(autoincrement())
+  permintaan_id              BigInt   @unique
+  nomor_surat                String   @unique @db.VarChar(100)
+  tanggal_surat              DateTime @db.Date
+  catatan                    String?
+  status                     String   @default("Draft") @db.VarChar(50)
+
+  tanggal_dikirim            DateTime? @db.Timestamp(6)
+  tanggal_diterima           DateTime? @db.Timestamp(6)
+  catatan_konfirmasi         String?
+
+  bukti_penerimaan_nama_file String?  @db.VarChar(255)
+  bukti_penerimaan_simpan    String?  @unique @db.VarChar(255)
+  bukti_penerimaan_path      String?
+  bukti_penerimaan_mime      String?  @db.VarChar(100)
+  bukti_penerimaan_ukuran    BigInt?
+
+  created_at                 DateTime @default(now()) @db.Timestamp(6)
+  updated_at                 DateTime @updatedAt @db.Timestamp(6)
+
+  permintaan_pengadaan        permintaan_pengadaan @relation(fields: [permintaan_id], references: [id], onDelete: Cascade)
+  item_surat_penawaran       item_surat_penawaran[]
+
+  @@index([status])
+}
+
+model item_surat_penawaran {
+  id                  BigInt   @id @default(autoincrement())
+  surat_penawaran_id  BigInt
+
+  // Snapshot data item dari permintaan PLN
+  request_item_id     BigInt?
+  nama_item           String   @db.VarChar(255)
+  spesifikasi_item    String
+  jumlah_penawaran    Int
+  jenis_item          String   @db.VarChar(20)
+
+  // Harga penawaran disimpan terpisah dari harga referensi
+  harga_satuan        Decimal? @db.Decimal(18, 2)
+  subtotal            Decimal? @db.Decimal(18, 2)
+
+  created_at          DateTime @default(now()) @db.Timestamp(6)
+  updated_at          DateTime @updatedAt @db.Timestamp(6)
+
+  surat_penawaran     surat_penawaran @relation(fields: [surat_penawaran_id], references: [id], onDelete: Cascade)
+
+  @@index([surat_penawaran_id])
+}
+
+model NomorSuratPenawaranSequence {
+  id             BigInt   @id @default(autoincrement())
+  tahun          Int      @unique
+  nomor_terakhir Int      @default(0)
+  updated_at     DateTime @updatedAt
+
+  @@map("nomor_surat_penawaran_sequence")
+}
